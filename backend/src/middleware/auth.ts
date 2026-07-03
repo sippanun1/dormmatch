@@ -48,6 +48,21 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
   }
 }
 
+// Like authenticate but never rejects — attaches user if token is valid, skips if not
+export function optionalAuthenticate(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string };
+      req.user = { id: decoded.id, email: decoded.email, role: decoded.role as "platform_admin" | "owner" | "tenant" };
+    } catch {
+      // invalid token — proceed without user
+    }
+  }
+  next();
+}
+
 // Check if user has one of the allowed roles
 export function authorize(...allowedRoles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {

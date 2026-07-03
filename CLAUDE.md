@@ -33,7 +33,7 @@ dormmatch/
 │       ├── expenses/             ← TODO
 │       └── ai/                   ← TODO
 ├── frontend/                     ← Next.js app
-├── database/schema.sql           ← All 16 tables (already created in Supabase)
+├── database/schema.sql           ← All 14 tables (already created in Supabase)
 ```
 
 ## Coding patterns — follow these exactly
@@ -54,8 +54,8 @@ modules/{name}/
 ```
 
 ### Database access
-- Use `supabaseAdmin` from `lib/supabase.ts` for server-side operations
-- Use `createUserClient(token)` when you need RLS-scoped queries
+- Use `supabaseAdmin` from `lib/supabase.ts` for ALL server-side operations
+- Do NOT use `createUserClient(token)` — the backend issues its own JWTs, not Supabase session tokens, so RLS-scoped queries via the user client will not work in this project
 - All queries use the Supabase JS client, NOT raw SQL
 - Example:
 ```typescript
@@ -93,7 +93,7 @@ app.use("/api/buildings", buildingRoutes);
 | owner | Manage own buildings/rooms/tenants, billing, maintenance |
 | tenant | Browse all rooms, apply, pay rent, submit maintenance |
 
-## Database — 16 tables
+## Database — 14 tables
 Schema is already in Supabase. Key tables and their relationships:
 - `users` → has role (platform_admin, owner, tenant)
 - `buildings` → belongs to owner (owner_id → users.id)
@@ -110,18 +110,36 @@ Schema is already in Supabase. Key tables and their relationships:
 - `notifications` → in-app notification log
 - `ai_reports` → cached daily AI analysis per building
 
+## JSONB field formats
+- `buildings.facilities` — free-form string array, e.g. `["WiFi", "Parking", "CCTV", "Pool"]`
+- `buildings.photo_urls` / `rooms.photo_urls` / `maintenance_requests.photo_urls` / `cleaning_tasks.photo_urls` — string arrays of URLs. The API accepts URLs as strings; file upload to storage is handled by the frontend.
+- `cleaning_tasks.checklist` — array of objects, e.g. `[{ "item": "Mop floor", "done": false }]`
+
 ## Row Level Security rules
 - Owner can ONLY see/modify their own buildings and related data
 - Tenant can browse ALL rooms (public) but only see their own invoices/maintenance
 - RLS is enforced at the database level — do NOT rely on API-only filtering
 
 ## Critical business rules
-1. **Meter reading → billing:** Owner enters old/new meter readings. System calculates: electricity_cost = (new - old) × building.electricity_rate, same for water. Invoice amount = rent + electricity_cost + water_cost + other_charges.
-2. **Invoice status flow:** unpaid → pending_verification (tenant uploads slip) → paid (owner verifies). If past due_date and still unpaid → overdue.
-3. **Room status is derived:** available = no active tenancy; occupied = active tenancy exists; maintenance = open maintenance request.
-4. **Application → tenancy:** When owner approves application, create a tenancy record and set room status to 'occupied'.
+1. **Meter reading → billing (two separate steps):**
+   - Step A — Owner enters meter readings room by room (saved to `meter_readings` table). Formula: `electricity_cost = (current - previous) × building.electricity_rate`, same for water.
+   - Step B — Owner clicks "Generate invoices". System shows a confirmation screen:
+     - Rooms ready to bill (have meter readings for this month) — full cost breakdown shown
+     - Rooms with missing readings — highlighted as warnings with room numbers
+     - Vacant rooms — automatically excluded, shown as "ห้องว่าง"
+   - Owner confirms → invoices created only for rooms with complete meter data. Rooms with missing readings are skipped; owner can enter readings later and generate those individually.
+   - Invoice amount = rent + electricity_cost + water_cost + other_charges.
+   - `meter_readings` and `invoices` are separate tables with no direct foreign key between them.
+2. **Invoice status flow:** unpaid → pending_verification (tenant uploads slip) → paid (owner verifies). Overdue is checked on read: when fetching invoices, if status = 'unpaid' AND due_date < today, update status to 'overdue' in the same operation. No scheduled job needed.
+3. **Room status is a stored column.** The API must update it explicitly. Valid values and rules:
+   - `available` — no active tenancy; set when tenancy ends (checkout)
+   - `occupied` — active tenancy exists; set when tenancy is created or application is approved
+   - `maintenance` — room is empty and needs work before re-listing; owner sets this manually. If a room is `occupied` and has a maintenance request, status stays `occupied` — do NOT change it to `maintenance`
+   - `unavailable` — owner manually takes the room offline (renovation, personal use, etc.); owner sets it and resets it manually
+   Update room status explicitly at these points: tenancy created → `occupied`; tenancy ended → `available`; owner manually sets → `maintenance` or `unavailable`.
+4. **Application → tenancy:** When owner approves an application: (1) create a tenancy record, (2) set room status to `occupied`, (3) auto-reject all other `pending` applications for the same `room_id`.
 5. **Checkout triggers cleaning:** When tenancy ends, auto-create a cleaning_task for that room.
-6. **True cost estimate:** GET /api/rooms/:id/cost-estimate queries last 6 months of meter_readings for the room, calculates average monthly electricity and water cost, returns estimate.
+6. **True cost estimate:** GET /api/rooms/:id/cost-estimate queries up to the last 6 months of `meter_readings` for the room and averages the monthly electricity and water cost. Use however many months of data exist — 2 months → average 2 months; 0 months → return `{ estimate: null, message: "No meter data available yet" }`. Never return an error for missing data.
 
 ## Things to NOT build
 - Roommate matching / compatibility scoring (removed — Thai dorms rent whole rooms to one tenant)
@@ -151,3 +169,10 @@ Schema is already in Supabase. Key tables and their relationships:
 - All pages must be responsive (mobile-friendly)
 - Use the App Router (/app directory) not Pages Router
 - Protected routes check auth and redirect to /login if not authenticated
+
+## Build progress tracking
+- A BUILD_PROGRESS.md file exists in the project root
+- Before starting any task, read BUILD_PROGRESS.md to see which step you're on
+- After completing a step, update BUILD_PROGRESS.md: change [ ] to [x] and add a one-line summary of what was built
+- Always tell me what you just finished and what the next step is before proceeding
+- Build ONE step at a time — never skip or combine steps

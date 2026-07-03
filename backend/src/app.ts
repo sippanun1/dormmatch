@@ -8,6 +8,10 @@ dotenv.config();
 
 // Import route modules
 import authRoutes from "./modules/auth/routes";
+import buildingRoutes from "./modules/buildings/routes";
+import roomRoutes from "./modules/rooms/routes";
+import applicationRoutes from "./modules/applications/routes";
+import tenancyRoutes from "./modules/tenancies/routes";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,11 +31,12 @@ app.get("/health", (req, res) => {
 // === API Routes ===
 app.use("/api/auth", authRoutes);
 
+app.use("/api/buildings", buildingRoutes);
+app.use("/api/rooms", roomRoutes);
+app.use("/api/applications", applicationRoutes);
+app.use("/api/tenancies", tenancyRoutes);
+
 // Uncomment as you build each module:
-// app.use("/api/buildings", buildingRoutes);
-// app.use("/api/rooms", roomRoutes);
-// app.use("/api/applications", applicationRoutes);
-// app.use("/api/tenancies", tenancyRoutes);
 // app.use("/api/billing", billingRoutes);
 // app.use("/api/maintenance", maintenanceRoutes);
 // app.use("/api/housekeeping", housekeepingRoutes);
