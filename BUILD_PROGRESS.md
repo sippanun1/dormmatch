@@ -13,10 +13,10 @@
 - [x] **Step 2:** Rooms module (CRUD, public browse, cost-estimate endpoint)
 - [x] **Step 3:** Applications module (tenant applies, owner approves → creates tenancy)
 - [x] **Step 4:** Tenancies module (check-in, check-out, walk-in registration)
-- [ ] **Step 5:** Frontend setup (Next.js + Tailwind + shadcn/ui + layout + auth pages)
-- [ ] **Step 6:** Owner dashboard page (metrics, floor plan grid, pending actions, AI insight card)
-- [ ] **Step 7:** Marketplace browse page (room cards, filters, search)
-- [ ] **Step 8:** Room detail page (photos, true cost estimate, amenities, apply button)
+- [x] **Step 5:** Frontend setup (Next.js + Tailwind + shadcn/ui + layout + auth pages)
+- [x] **Step 6:** Owner dashboard page (metrics, floor plan grid, pending actions, AI insight card)
+- [x] **Step 7:** Marketplace browse page (room cards, filters, search)
+- [x] **Step 8:** Room detail page (photos, true cost estimate, amenities, apply button)
 
 ---
 
@@ -43,7 +43,44 @@
 
 ---
 
+## Demo accounts
+- **Owner:** demo.owner@dormmatch.dev / demo1234 — สมชาย ใจดี, owns "หอพักสุขใจ เพลส" (8 rooms, floors 1–2)
+- **Tenant:** smoketest.dormmatch@gmail.com / test1234
+
+## Regression testing
+- **Script:** `backend/test.sh` — run with `bash test.sh` while the backend is up (uses fresh timestamped test users each run)
+- **Covers Steps 1–5:** auth (register/login/me, 401s), buildings (CRUD + owner isolation), rooms (create, browse, detail, cost-estimate, isolation), applications (apply, duplicate 409, approve flow, role 403s, isolation), tenancies (list, /my, tenancy auto-created on approval, room → occupied)
+- **Last run:** 2026-07-04 (after Step 8) — 40/40 passed
+- Extend this script when each new module is built, then re-run in full before marking the step done
+
 ## Completed Steps
+
+### Step 8 — Room detail page ✓ (Phase 1 complete)
+- **Files created:** `app/rooms/[id]/page.tsx` (photo gallery + thumbnails, status badge, detail/facility badges, price, utility-rates line), `components/rooms/cost-estimate-card.tsx` (rent + avg electricity/water + total from `/cost-estimate`; rent-only fallback when no meter data), `components/rooms/apply-dialog.tsx` (tenant apply with optional message; login CTA when logged out; hidden for owner/admin; disabled when unavailable; success + 409 conflict states)
+- **Files modified:** `messages/th.json` + `en.json` (roomDetail labels), `lib/types.ts` (CostEstimate)
+- **Test results:** build passes (`/rooms/[id]` 7.92 kB, dynamic); live API — room detail returns building + facilities, cost-estimate gracefully returns `{estimate: null}`, tenant apply → 201, duplicate → 409; regression `backend/test.sh` — 40/40 passed
+- **Demo data:** smoke tenant now has a pending application on demo room 101 (visible in owner dashboard pending actions)
+
+### Step 7 — Marketplace browse page ✓
+- **Files created:** `app/rooms/page.tsx` (public browse: search box, building select, min/max price, AC-only checkbox, debounced API fetch), `components/rooms/room-card.tsx` (photo/placeholder, building + room, address, badges, price, view-details link to `/rooms/[id]` — detail page is Step 8)
+- **Files modified:** `components/header.tsx` (nav links: browse always, dashboard when logged in), `app/page.tsx` (browse CTA → /rooms), dashboard tenant card (browse button), `messages/th.json` + `en.json` (browse labels)
+- **Filters:** building/AC/price go to the API (`?building_id=&has_ac=&min_price=&max_price=`, 400ms debounce); text search filters client-side on building name/address/room number
+- **Test results:** build passes (/rooms 5.31 kB); API verified — public browse returns 6 available demo rooms (maintenance/unavailable excluded), `has_ac=true&max_price=4500` → rooms 103/202/203; regression `backend/test.sh` — 40/40 passed
+- **Env fix made durable:** `@parcel/watcher-linux-x64-glibc` added to `optionalDependencies` so WSL builds survive `npm install` from Windows
+
+### Step 6 — Owner dashboard ✓
+- **Files created:** `lib/types.ts` (Building/Room/Application types), `components/dashboard/owner-dashboard.tsx` (data fetching, building selector, metric cards), `floor-plan-grid.tsx` (rooms grouped by floor, color-coded by status + legend), `pending-applications.tsx` (approve dialog with check-in date → PATCH approve; reject), `ai-insight-card.tsx` (placeholder until Phase 3), `building-dialog.tsx` + `room-dialog.tsx` (minimal owner CRUD so the dashboard is usable)
+- **Files modified:** `app/(protected)/dashboard/page.tsx` (owner → full dashboard, tenant → placeholder), `messages/th.json` + `en.json` (dashboard/applications/form labels)
+- **Metrics:** total rooms, occupancy rate, available count, pending applications — computed from `GET /api/rooms?building_id=` and `GET /api/applications?status=pending` (filtered per building client-side)
+- **Test results:** `npm run build` passes (dashboard 8.06 kB); full regression `backend/test.sh` re-run — 40/40 passed
+- **Env note:** `npm install` from Windows swaps in win32 binaries; fixed WSL build with `npm install --no-save @parcel/watcher-linux-x64-glibc`
+
+### Step 5 — Frontend setup ✓
+- **Scaffolded:** Next.js 14 App Router + TypeScript + Tailwind + shadcn/ui (10 components) + next-intl (Thai default, `messages/th.json` + `messages/en.json`)
+- **Files created:** `lib/api.ts` (fetch wrapper + token storage), `lib/auth-context.tsx` (AuthProvider: login/register/logout/session restore), `components/header.tsx`, `app/page.tsx` (landing), `app/login/page.tsx`, `app/register/page.tsx`, `app/(protected)/layout.tsx` (auth guard → redirects to /login), `app/(protected)/dashboard/page.tsx` (placeholder), `i18n/request.ts`, `.env.local` (NEXT_PUBLIC_API_URL)
+- **Backend fixes found during e2e testing:** (1) `lib/supabase.ts` now accepts new-style Supabase keys (`SUPABASE_SECRET_KEY`/`SUPABASE_PUBLISHABLE_KEY`) alongside legacy names; (2) login now uses a throwaway auth client (`createAuthClient()`) for `signInWithPassword` — signing in on the shared `supabaseAdmin` client replaced its service-role auth state and broke RLS bypass ("User profile not found" on login)
+- **Verified:** `npm run build` passes; register → login → /me → wrong-password-401 all tested against live Supabase
+- **Test account:** smoketest.dormmatch@gmail.com / test1234 (tenant)
 
 ### Step 4 — Tenancies module ✓
 - **Files created:** `backend/src/modules/tenancies/routes.ts` (1 file)

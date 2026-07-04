@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import { supabaseAdmin } from "../../lib/supabase";
+import { supabaseAdmin, createAuthClient } from "../../lib/supabase";
 import { authenticate } from "../../middleware/auth";
 
 const router = Router();
@@ -78,9 +78,10 @@ router.post("/login", async (req: Request, res: Response) => {
   try {
     const body = loginSchema.parse(req.body);
 
-    // Authenticate with Supabase
+    // Authenticate with Supabase on a throwaway client so the shared
+    // admin client's service-role auth state is never replaced
     const { data: authData, error: authError } =
-      await supabaseAdmin.auth.signInWithPassword({
+      await createAuthClient().auth.signInWithPassword({
         email: body.email,
         password: body.password,
       });

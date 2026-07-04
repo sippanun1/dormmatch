@@ -176,3 +176,13 @@ Schema is already in Supabase. Key tables and their relationships:
 - After completing a step, update BUILD_PROGRESS.md: change [ ] to [x] and add a one-line summary of what was built
 - Always tell me what you just finished and what the next step is before proceeding
 - Build ONE step at a time — never skip or combine steps
+
+## Testing rules
+- After completing each step, test the new endpoints using curl or a test script
+- Also verify that previous steps still work (no regressions)
+- Log test results in BUILD_PROGRESS.md under each step's entry
+- Minimum tests per backend module:
+  - Happy path (correct input → correct output)
+  - Auth check (no token → 401, wrong role → 403)
+  - Owner isolation (owner A can't see owner B's data)
+- Before marking a step as done, run ALL previous endpoint tests to confirm nothing broke
